@@ -1,0 +1,194 @@
+#!/bin/bash
+
+#######################################
+# Directory Usage Script
+#
+# This script displays disk usage information for the current directory
+# and its immediate subdirectories, with a nice interface.
+# Only displays sizes in whole MB.
+# Works on both Linux and macOS systems.
+#
+# Author: Your Name
+#######################################
+
+clear
+
+# Default threshold sizes in MB
+WARN_SIZE_MB=100
+CRIT_SIZE_MB=500
+TARGET_DIR="$(pwd)"
+
+# Default color codes using tput
+COLOR_BLACK=$(tput setaf 0)
+COLOR_RED=$(tput setaf 1)
+COLOR_GREEN=$(tput setaf 2)
+COLOR_YELLOW=$(tput setaf 3)
+COLOR_BLUE=$(tput setaf 4)
+COLOR_MAGENTA=$(tput setaf 5)
+COLOR_CYAN=$(tput setaf 6)
+COLOR_WHITE=$(tput setaf 7)
+COLOR_LIGHT_GRAY=$(tput setaf 8)
+COLOR_DARK_GRAY=$(tput setaf 9)
+COLOR_LIGHT_RED=$(tput setaf 10)
+COLOR_LIGHT_GREEN=$(tput setaf 11)
+COLOR_LIGHT_YELLOW=$(tput setaf 12)
+COLOR_LIGHT_BLUE=$(tput setaf 13)
+COLOR_LIGHT_MAGENTA=$(tput setaf 14)
+COLOR_LIGHT_CYAN=$(tput setaf 15)
+COLOR_RESET=$(tput sgr0)
+
+# Function to display help message
+display_help() {
+    cat << EOF
+Usage: $0 [options]
+
+Options:
+  -w, --warn <size>          Warning threshold size in MB (default: 100)
+  -c, --critical <size>      Critical threshold size in MB (default: 500)
+  -d, --directory <path>     Directory to analyze (default: current directory)
+  -o, --output <file>        Output file to save results
+  -h, --help                 Display this help message
+
+Examples:
+  $0
+  $0 --warn 200 --critical 1000
+  $0 -d "/path/with spaces/to/directory"
+  $0 -o directory_usage.txt
+EOF
+    exit 0
+}
+
+# Parse command-line options
+OUTPUT_FILE=""
+while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+        -w|--warn)
+            WARN_SIZE_MB="$2"
+            shift 2
+            ;;
+        -c|--critical)
+            CRIT_SIZE_MB="$2"
+            shift 2
+            ;;
+        -d|--directory)
+            TARGET_DIR="$2"
+            shift 2
+            ;;
+        -o|--output)
+            OUTPUT_FILE="$2"
+            shift 2
+            ;;
+        -h|--help)
+            display_help
+            ;;
+        *)
+            echo "Unknown option: $1"
+            display_help
+            ;;
+    esac
+done
+
+# Check if figlet is installed
+if ! command -v figlet >/dev/null 2>&1; then
+    echo "Error: 'toilet' is not installed. Please install it and try again."
+    exit 1
+fi
+
+# Check if tput is available for coloring
+if ! command -v tput >/dev/null 2>&1; then
+    echo "Warning: 'tput' is not available. Coloring will not be supported."
+    COLOR_BLACK=""
+    COLOR_RED=""
+    COLOR_GREEN=""
+    COLOR_YELLOW=""
+    COLOR_BLUE=""
+    COLOR_MAGENTA=""
+    COLOR_CYAN=""
+    COLOR_WHITE=""
+    COLOR_LIGHT_GRAY=""
+    COLOR_DARK_GRAY=""
+    COLOR_LIGHT_RED=""
+    COLOR_LIGHT_GREEN=""
+    COLOR_LIGHT_YELLOW=""
+    COLOR_LIGHT_BLUE=""
+    COLOR_LIGHT_MAGENTA=""
+    COLOR_LIGHT_CYAN=""
+    COLOR_RESET=""
+fi
+
+# Function to determine color based on size
+get_size_color() {
+    local size_in_mb="$1"
+    if (( size_in_mb >= CRIT_SIZE_MB )); then
+        echo "$COLOR_RED"
+    elif (( size_in_mb >= WARN_SIZE_MB )); then
+        echo "$COLOR_YELLOW"
+    else
+        echo "$COLOR_GREEN"
+    fi
+}
+
+# Function to format size in whole MB
+format_size() {
+    local size_in_mb="$1"
+    if [[ "$size_in_mb" =~ ^[0-9]+$ ]]; then
+        printf "%d MB" "$size_in_mb"
+    else
+        echo "Invalid size: $size_in_mb"
+        return 1
+    fi
+}
+
+# Function to output data (to file or stdout)
+output_data() {
+    if [ -n "$OUTPUT_FILE" ]; then
+        echo -e "$1" >> "$OUTPUT_FILE"
+    else
+        echo -e "$1"
+    fi
+}
+
+# Display a header using figlet
+HEADER=$(figlet 'Oh My Space!' && sleep 0.7 && toilet --filter gay 'PRO')
+output_data "${COLOR_LIGHT_GREEN}${HEADER}${COLOR_RESET}"
+
+# Display the current target directory
+output_data "${COLOR_CYAN}Analyzing at ${COLOR_RESET}${TARGET_DIR}\n"
+
+# Display the column headers with colors
+HEADERS=$(printf "%-50s %15s\n" "Directory" "Size")
+output_data "${COLOR_CYAN}${HEADERS}${COLOR_RESET}"
+
+# List directories and their sizes
+du -d 1 -m "$TARGET_DIR" 2>/dev/null | sort -nr | while IFS='' read -r line || [[ -n "$line" ]]; do
+    # Extract size and directory, handling spaces in directory names
+    size_in_mb=$(echo "$line" | awk '{print $1}')
+    dir=$(echo "$line" | awk '{$1=""; sub(/^ +/, ""); print}')
+    
+    # Remove leading path and leading slash if present
+    dir="${dir#$TARGET_DIR}"
+    dir="${dir#./}"
+    dir="${dir#/}"
+    
+    # Handle empty directory name (root of target directory)
+    if [ -z "$dir" ]; then
+        dir="."
+    fi
+    
+    # Get color based on size
+    size_color=$(get_size_color "$size_in_mb")
+    
+    # Format size
+    formatted_size=$(format_size "$size_in_mb")
+    
+    # Format line
+    formatted_line=$(printf "%-50s %15s\n" "$dir" "$formatted_size")
+    
+    # Output line with color
+    output_data "${COLOR_RESET}${formatted_line//$formatted_size/${size_color}${formatted_size}${COLOR_RESET}}"
+done
+
+# Notify if output is saved to file
+if [ -n "$OUTPUT_FILE" ]; then
+    echo "Directory usage information saved to $OUTPUT_FILE"
+fi
